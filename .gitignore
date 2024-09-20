@@ -33,3 +33,11 @@ dist-ssr
 yarn.lock
 pnpm-lock.yaml
 .vercel
+
+ericgit
+ericgit.pub 
+
+# Added by cargo
+
+
+/target

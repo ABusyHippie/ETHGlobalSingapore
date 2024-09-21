@@ -10,19 +10,15 @@ Our platform allows trading on whether the interest earned from staking (APY) fo
 
 We built a new leveraged DeFi trading derivative with Rootstock where you can bet on yield protocol APY over time. This DeFi app uses the Rootstock network as the token for placing trades, allowing BTC to be utilized for a new DeFi application across many EVM products.
 
-## Supported Networks
-
+### Supported Networks
 - Rootstock Mainnet
 - Rootstock Testnet
 
 ## Team
 
-[Add team information here]
-## Team
-
 ### Bart Hofkin
 - Developer on a mission to change the game in the startup world
-- Background in Computational Physics from the University of Illinois
+- Background in Computational Physics from the University of Illinois at Urbana-Champaign
 - Several Hackathon wins
 - Experience as an entrepreneur
 - Proud owner of the world's best cat

@@ -8,6 +8,9 @@ export default function Navbar(): JSX.Element {
       <Link to="/">
         <Logo className="w-[150px] h-[50px]" />
       </Link>
+      <Link to="/yield-trading" className="text-white hover:text-gray-300">
+        Yield Trading
+      </Link>
       <ConnectButton
         showBalance={false}
         chainStatus={{ smallScreen: "none", largeScreen: "icon" }}

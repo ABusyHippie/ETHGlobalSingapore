@@ -1,30 +1,47 @@
+use warp::Filter;
 use reqwest::Client;
 use serde::Deserialize;
 use std::time::Duration;
-use thiserror::Error;
+use std::sync::Arc;
 use tokio::time;
-use warp::Filter;
+use thiserror::Error;
+use ethers::{
+    prelude::*,
+    providers::{Provider, Http},
+    signers::{LocalWallet, Signer},
+};
+use std::sync::Mutex;
+use dotenv::dotenv;
+use std::env;
+use std::path::Path;
 
-// Define a custom error type to handle both reqwest and serde_json errors
 #[derive(Error, Debug)]
 pub enum ApiError {
     #[error("Request failed: {0}")]
     ReqwestError(#[from] reqwest::Error),
-
+    
     #[error("Deserialization failed: {0}")]
     JsonError(#[from] serde_json::Error),
+
+    #[error("Ethers provider error: {0}")]
+    ProviderError(#[from] ProviderError),
+
+    #[error("Ethers contract error: {0}")]
+    ContractError(Box<dyn std::error::Error + Send + Sync>),
+
+    #[error("Environment variable not found: {0}")]
+    EnvVarError(#[from] env::VarError),
 }
 
-// Struct to deserialize the response from the Lido API for current APR
 #[derive(Deserialize, Debug)]
 struct LidoAPRResponse {
-    data: LidoData, // For the Last APR data
-    meta: LidoMeta, // Metadata (symbol, chainId, etc.)
+    data: LidoData,
+    meta: LidoMeta,
 }
 
 #[derive(Deserialize, Debug)]
 struct LidoData {
-    apr: f64, // APR value from the Lido Finance API
+    apr: f64,
 }
 
 #[derive(Deserialize, Debug)]
@@ -34,70 +51,59 @@ struct LidoMeta {
     chainId: u32,
 }
 
-// Struct to deserialize the response for SMA APR
 #[derive(Deserialize, Debug)]
 struct LidoSMAResponse {
-    data: LidoSMAData, // For SMA data
-    meta: LidoMeta,    // Metadata
+    data: LidoSMAData,
+    meta: LidoMeta,
 }
 
 #[derive(Deserialize, Debug)]
 struct LidoSMAData {
-    smaApr: f64,         // Simple Moving Average APR (7 days)
-    aprs: Vec<LidoData>, // List of daily APRs
+    smaApr: f64,
+    aprs: Vec<LidoData>,
 }
 
-// Fetch Lido's Last (Current) APR on mainnet
+abigen!(
+    LidoAPYPerpetual,
+    r#"[
+        function updateAPY(uint256 _newAPY) external
+    ]"#,
+);
+
 async fn fetch_current_apy() -> Result<f64, ApiError> {
     let client = Client::new();
-    let lido_api_url = "https://eth-api.lido.fi/v1/protocol/steth/apr/last"; // Mainnet Current APR
-
-    // Send request to the API
+    let lido_api_url = "https://eth-api.lido.fi/v1/protocol/steth/apr/last";
+   
     let response = client.get(lido_api_url).send().await?;
-
-    // Check the status code and log the response
+    
     if !response.status().is_success() {
-        println!(
-            "Failed to fetch current APR, status code: {}",
-            response.status()
-        );
+        println!("Failed to fetch current APR, status code: {}", response.status());
     }
 
-    // Log the full response for debugging
     let body = response.text().await?;
     println!("Current APR Response: {}", body);
 
-    // Deserialize based on the actual response structure
     let apy_response: LidoAPRResponse = serde_json::from_str(&body)?;
-    Ok(apy_response.data.apr) // Access the APR value within `data`
+    Ok(apy_response.data.apr)
 }
 
-// Fetch Lido's 7-Day SMA APR on mainnet
 async fn fetch_sma_apy() -> Result<f64, ApiError> {
     let client = Client::new();
-    let lido_api_url = "https://eth-api.lido.fi/v1/protocol/steth/apr/sma"; // Mainnet SMA APR
-
-    // Send request to the API
+    let lido_api_url = "https://eth-api.lido.fi/v1/protocol/steth/apr/sma";
+   
     let response = client.get(lido_api_url).send().await?;
 
-    // Check the status code and log the response
     if !response.status().is_success() {
-        println!(
-            "Failed to fetch SMA APR, status code: {}",
-            response.status()
-        );
+        println!("Failed to fetch SMA APR, status code: {}", response.status());
     }
 
-    // Log the full response for debugging
     let body = response.text().await?;
     println!("SMA APR Response: {}", body);
 
-    // Deserialize based on the actual response structure
     let apy_response: LidoSMAResponse = serde_json::from_str(&body)?;
-    Ok(apy_response.data.smaApr) // Access the SMA APR value within `data`
+    Ok(apy_response.data.smaApr)
 }
 
-// API handler to fetch both SMA and Current APR and return them as a JSON response
 async fn apy_handler() -> Result<impl warp::Reply, warp::Rejection> {
     let current_apr = fetch_current_apy().await;
     let sma_apr = fetch_sma_apy().await;
@@ -108,68 +114,125 @@ async fn apy_handler() -> Result<impl warp::Reply, warp::Rejection> {
             "sma_apr": sma,
         }))),
         (Err(current_err), Err(sma_err)) => {
-            println!(
-                "Failed to fetch both APR values. Current APR error: {:?}, SMA APR error: {:?}",
-                current_err, sma_err
-            );
-            Ok(warp::reply::json(
-                &serde_json::json!({ "error": "Failed to fetch both APR values." }),
-            ))
-        }
+            println!("Failed to fetch both APR values. Current APR error: {:?}, SMA APR error: {:?}", current_err, sma_err);
+            Ok(warp::reply::json(&serde_json::json!({ "error": "Failed to fetch both APR values." })))
+        },
         (Err(current_err), Ok(sma)) => {
-            println!(
-                "Failed to fetch current APR. Error: {:?}, SMA APR fetched: {:.9}%",
-                current_err, sma
-            );
+            println!("Failed to fetch current APR. Error: {:?}, SMA APR fetched: {:.9}%", current_err, sma);
             Ok(warp::reply::json(&serde_json::json!({
                 "sma_apr": sma,
                 "error": "Failed to fetch current APR."
             })))
-        }
+        },
         (Ok(current), Err(sma_err)) => {
-            println!(
-                "Failed to fetch SMA APR. Error: {:?}, Current APR fetched: {:.9}%",
-                sma_err, current
-            );
+            println!("Failed to fetch SMA APR. Error: {:?}, Current APR fetched: {:.9}%", sma_err, current);
             Ok(warp::reply::json(&serde_json::json!({
                 "current_apr": current,
                 "error": "Failed to fetch SMA APR."
             })))
-        }
+        },
     }
 }
 
-// Heartbeat function to fetch and print both the SMA and Current APR periodically
-async fn heartbeat() {
-    let mut interval = time::interval(Duration::from_secs(5)); // 5 seconds interval
+async fn update_contract_apy(new_apy: f64, contract: &LidoAPYPerpetual<SignerMiddleware<Provider<Http>, LocalWallet>>) -> Result<(), ApiError> {
+    let new_apy_scaled = (new_apy * 1e18) as u128;
+    
+    // Create a legacy (non EIP-1559) transaction
+    let tx = contract.update_apy(new_apy_scaled.into())
+        .legacy();
+    
+    // Send the transaction
+    let pending_tx = tx.send().await.map_err(|e| ApiError::ContractError(Box::new(e)))?;
+    
+    // Wait for the transaction receipt
+    let receipt = pending_tx.await.map_err(|e| ApiError::ContractError(Box::new(e)))?;
+    
+    println!("Transaction successful: {:?}", receipt);
+    Ok(())
+}
+
+async fn heartbeat(contract: Arc<LidoAPYPerpetual<SignerMiddleware<Provider<Http>, LocalWallet>>>, last_apy: Arc<Mutex<f64>>) {
+    let mut interval = time::interval(Duration::from_secs(5));
 
     loop {
         interval.tick().await;
         let current_apr = fetch_current_apy().await;
-        let sma_apr = fetch_sma_apy().await;
 
-        match (current_apr, sma_apr) {
-            (Ok(current), Ok(sma)) => println!(
-                "Heartbeat: Current APR: {:.9}%, SMA APR: {:.9}%",
-                current, sma
-            ),
-            _ => println!("/nHeartbeat: Failed to fetch one or both APR values."),
+        match current_apr {
+            Ok(current) => {
+                println!("Heartbeat: Current APR: {:.9}%", current);
+                
+                let should_update = {
+                    let last = last_apy.lock().unwrap();
+                    (current - *last).abs() > 1e-9
+                };
+
+                if should_update {
+                    println!("APY changed. Updating contract...");
+                    if let Err(e) = update_contract_apy(current, &contract).await {
+                        println!("Failed to update contract APY: {:?}", e);
+                    } else {
+                        let mut last = last_apy.lock().unwrap();
+                        *last = current;
+                        println!("Contract APY updated successfully.");
+                    }
+                } else {
+                    println!("No significant APY change. Skipping contract update.");
+                }
+            },
+            Err(e) => println!("\nHeartbeat: Failed to fetch current APR: {:?}", e),
         }
     }
 }
 
 #[tokio::main]
-async fn main() {
-    dotenv::dotenv().ok(); // Load .env variables if needed
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    dotenv::from_path(Path::new(".env")).ok();
+    
+    let apy_route = warp::path!("apy")
+        .and(warp::get())
+        .and_then(apy_handler);
 
-    // Define the API route
-    let apy_route = warp::path!("apy").and(warp::get()).and_then(apy_handler);
+    let rpc_url = env::var("ROOTSTOCK_TESTNET_RPC_URL")
+        .map_err(|_| "ROOTSTOCK_TESTNET_RPC_URL not set in .env file")?;
+    println!("RPC URL: {}", rpc_url);
 
-    // Spawn the heartbeat task in the background
-    tokio::spawn(async {
-        heartbeat().await;
+    let provider = Provider::<Http>::try_from(rpc_url)?;
+
+    let private_key = env::var("PRIVATE_KEY")
+        .map_err(|_| "PRIVATE_KEY not set in .env file")?;
+    println!("Private key loaded");
+
+    let chain_id: u64 = env::var("CHAIN_ID")
+        .map_err(|_| "CHAIN_ID not set in .env file")?
+        .parse()
+        .map_err(|_| "Invalid CHAIN_ID in .env file")?;
+    println!("Chain ID: {}", chain_id);
+
+    let wallet: LocalWallet = private_key.parse::<LocalWallet>()?.with_chain_id(chain_id);
+
+    let client = SignerMiddleware::new(provider, wallet);
+
+    let contract_address = env::var("CONTRACT_ADDRESS")
+        .map_err(|_| "CONTRACT_ADDRESS not set in .env file")?
+        .parse::<Address>()
+        .map_err(|_| "Invalid CONTRACT_ADDRESS in .env file")?;
+    println!("Contract address: {:?}", contract_address);
+
+    let contract = LidoAPYPerpetual::new(contract_address, Arc::new(client));
+
+    let last_apy = Arc::new(Mutex::new(0.0));
+
+    let contract_clone = Arc::new(contract);
+    let last_apy_clone = Arc::clone(&last_apy);
+    tokio::spawn(async move {
+        heartbeat(contract_clone, last_apy_clone).await;
     });
 
-    // Start the server on port 3030
-    warp::serve(apy_route).run(([127, 0, 0, 1], 3030)).await;
+    println!("Starting server on http://127.0.0.1:3030");
+    warp::serve(apy_route)
+        .run(([127, 0, 0, 1], 3030))
+        .await;
+
+    Ok(())
 }

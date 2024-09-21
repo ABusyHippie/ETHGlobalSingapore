@@ -7,6 +7,14 @@ import Loader from "@/components/ui/loader";
 import { useQuery } from '@tanstack/react-query';
 import { gql, request } from 'graphql-request';
 import { motion } from 'framer-motion';
+import { ethers } from 'ethers';
+import LidoAPYPerpetualABI from '../../abi.json';
+import { useWalletClient } from 'wagmi';
+
+// Import environment variables
+const CONTRACT_ADDRESS = '0x5c617a8f9bd9620604c5bfb30e5c7812f37bae73';
+// const CHAIN_ID = import.meta.env.VITE_CHAIN_ID;
+// const ROOTSTOCK_TESTNET_RPC_URL = import.meta.env.VITE_ROOTSTOCK_TESTNET_RPC_URL;
 
 interface YieldItem {
   name: string;
@@ -85,19 +93,75 @@ export default function YieldTrading() {
     };
   }, []);
 
+  const { data: walletClient } = useWalletClient();
+
   const handleTrade = async () => {
-    // Implement trading logic here to interact with the smart contract
+    if (!selectedYield || !rbtcAmount || !leverage || !walletClient) return;
+
     try {
-      // Placeholder for contract interaction
-      // const result = await TradingContract.trade(selectedYield, leverage);
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, LidoAPYPerpetualABI, walletClient);
+      
+      const collateralAmount = ethers.utils.parseEther(rbtcAmount);
+      const leverageWei = ethers.utils.parseUnits(leverage.toString(), 18);
+      // Assuming APY is in percentage, convert to wei (e.g., 5% -> 5 * 1e16)
+      const takeProfitAPY = ethers.utils.parseUnits((selectedYield.apy * 1.1).toString(), 16);
+      const stopLossAPY = ethers.utils.parseUnits((selectedYield.apy * 0.9).toString(), 16);
+
+      const tx = await contract.openPosition(
+        ethers.constants.AddressZero, // Assuming RBTC is used as collateral
+        position === 'long',
+        collateralAmount,
+        leverageWei,
+        takeProfitAPY,
+        stopLossAPY,
+        { value: collateralAmount }
+      );
+
+      toast({
+        title: "Trade Submitted",
+        description: `Transaction hash: ${tx.hash}`,
+      });
+
+      await tx.wait();
+
       toast({
         title: "Trade Successful",
-        description: `You've traded ${selectedYield} with ${leverage}x leverage`,
+        description: `You've opened a ${position} position with ${leverage}x leverage`,
       });
     } catch (error) {
+      console.error('Error opening position:', error);
       toast({
         title: "Trade Failed",
         description: "An error occurred while processing your trade",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const closePosition = async () => {
+    if (!walletClient) return;
+
+    try {
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, LidoAPYPerpetualABI, walletClient);
+      
+      const tx = await contract.closePosition(ethers.constants.AddressZero);
+      
+      toast({
+        title: "Closing Position",
+        description: `Transaction hash: ${tx.hash}`,
+      });
+
+      await tx.wait();
+
+      toast({
+        title: "Position Closed",
+        description: "Your position has been successfully closed",
+      });
+    } catch (error) {
+      console.error('Error closing position:', error);
+      toast({
+        title: "Close Failed",
+        description: "An error occurred while closing your position",
         variant: "destructive",
       });
     }
@@ -223,6 +287,13 @@ export default function YieldTrading() {
               className={`w-full ${position === 'long' ? 'bg-green-500' : 'bg-red-500'}`}
             >
               {position === 'long' ? 'Long' : 'Short'}
+            </Button>
+
+            <Button
+              onClick={closePosition}
+              className="w-full mt-2 bg-gray-500"
+            >
+              Close Position
             </Button>
           </CardContent>
         </Card>

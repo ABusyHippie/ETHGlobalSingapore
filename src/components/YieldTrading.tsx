@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import Button from "@/components/ui/button";
-import { useAccount, useReadContract, useWriteContract, useContractRead } from "wagmi";
+import { useAccount, useSignMessage, useReadContract, useWriteContract, useContractRead } from "wagmi";
 import { useToast } from "@/components/ui/use-toast";
 import Loader from "@/components/ui/loader";
 import { useQuery } from '@tanstack/react-query';
@@ -9,7 +9,6 @@ import { gql, request } from 'graphql-request';
 import { motion } from 'framer-motion';
 import { ethers } from 'ethers';
 import LidoAPYPerpetualABI from '../../abi.json';
-import { useWalletClient } from 'wagmi';
 
 // Import environment variables
 const CONTRACT_ADDRESS = '0x5c617a8f9bd9620604c5bfb30e5c7812f37bae73';
@@ -109,36 +108,41 @@ export default function YieldTrading() {
     };
   }, []);
 
-  const { data: walletClient } = useWalletClient();
+  const { signMessage } = useSignMessage();
+  const { writeContract } = useWriteContract();
 
   const handleTrade = async () => {
-    if (!selectedYield || !rbtcAmount || !leverage || !walletClient) return;
+    if (!selectedYield || !rbtcAmount || !leverage || !address) return;
 
     try {
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, LidoAPYPerpetualABI, walletClient);
-      
       const collateralAmount = ethers.utils.parseEther(rbtcAmount);
       const leverageWei = ethers.utils.parseUnits(leverage.toString(), 18);
-      // Assuming APY is in percentage, convert to wei (e.g., 5% -> 5 * 1e16)
       const takeProfitAPY = ethers.utils.parseUnits((selectedYield.apy * 1.1).toString(), 16);
       const stopLossAPY = ethers.utils.parseUnits((selectedYield.apy * 0.9).toString(), 16);
 
-      const tx = await contract.openPosition(
-        ethers.constants.AddressZero, // Assuming RBTC is used as collateral
-        position === 'long',
-        collateralAmount,
-        leverageWei,
-        takeProfitAPY,
-        stopLossAPY,
-        { value: collateralAmount }
-      );
+      const { hash } = await writeContract({
+        address: CONTRACT_ADDRESS,
+        abi: LidoAPYPerpetualABI,
+        functionName: 'openPosition',
+        args: [
+          ethers.constants.AddressZero,
+          position === 'long',
+          collateralAmount,
+          leverageWei,
+          takeProfitAPY,
+          stopLossAPY
+        ],
+        value: collateralAmount,
+      });
 
       toast({
         title: "Trade Submitted",
-        description: `Transaction hash: ${tx.hash}`,
+        description: `Transaction hash: ${hash}`,
       });
 
-      await tx.wait();
+      // Wait for transaction confirmation
+      const provider = new ethers.providers.JsonRpcProvider(/* Add your RPC URL here */);
+      await provider.waitForTransaction(hash);
 
       toast({
         title: "Trade Successful",
@@ -155,19 +159,24 @@ export default function YieldTrading() {
   };
 
   const closePosition = async () => {
-    if (!walletClient) return;
+    if (!address) return;
 
     try {
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, LidoAPYPerpetualABI, walletClient);
-      
-      const tx = await contract.closePosition(ethers.constants.AddressZero);
+      const { hash } = await writeContract({
+        address: CONTRACT_ADDRESS,
+        abi: LidoAPYPerpetualABI,
+        functionName: 'closePosition',
+        args: [ethers.constants.AddressZero],
+      });
       
       toast({
         title: "Closing Position",
-        description: `Transaction hash: ${tx.hash}`,
+        description: `Transaction hash: ${hash}`,
       });
 
-      await tx.wait();
+      // Wait for transaction confirmation
+      const provider = new ethers.providers.JsonRpcProvider(/* Add your RPC URL here */);
+      await provider.waitForTransaction(hash);
 
       toast({
         title: "Position Closed",

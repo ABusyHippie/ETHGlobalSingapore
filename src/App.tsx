@@ -11,7 +11,8 @@ function App() {
       <main className="min-h-screen flex flex-col justify-between">
         <Navbar />
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<YieldTrading />} />
+          <Route path="/home" element={<Home />} />
           <Route path="/aa" element={<Etherspot />} />
           <Route path="/wagmi" element={<Wagmi />} />
           <Route path="/yield-trading" element={<YieldTrading />} />

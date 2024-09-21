@@ -1,6 +1,6 @@
 # APEY Fi: Monkey Around with APY
 
-<img src="dashboard.png" alt="Dashboard Image" style="width:100%; height: auto;" />
+<img src="./images/dashboard.png" alt="Dashboard Image" style="width:100%; height: auto;" />
 
 ## Project Overview
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import Button from "@/components/ui/button";
-import { useAccount, useSignMessage, useReadContract, useWriteContract, useContractRead } from "wagmi";
+import { useAccount, useSignMessage, useWriteContract, useContractRead } from "wagmi";
 import { useToast } from "@/components/ui/use-toast";
 import Loader from "@/components/ui/loader";
 import { useQuery } from '@tanstack/react-query';
@@ -9,15 +9,25 @@ import { gql, request } from 'graphql-request';
 import { motion } from 'framer-motion';
 import { ethers } from 'ethers';
 import LidoAPYPerpetualABI from '../../abi.json';
+import { TransactionResponse } from 'ethers/providers';
 
 // Import environment variables
 const CONTRACT_ADDRESS = '0x5c617a8f9bd9620604c5bfb30e5c7812f37bae73';
 // const CHAIN_ID = import.meta.env.VITE_CHAIN_ID;
 // const ROOTSTOCK_TESTNET_RPC_URL = import.meta.env.VITE_ROOTSTOCK_TESTNET_RPC_URL;
 
+interface YieldDataItem {
+  name: string;
+  apy: number;
+}
+
 interface YieldItem {
   name: string;
   apy: number;
+}
+
+interface ApyData {
+  apyupdateds: Array<{ id: string; newAPY: string }>;
 }
 
 const query = gql`{
@@ -51,7 +61,7 @@ interface Position {
 }
 
 export default function YieldTrading() {
-  const [yieldData, setYieldData] = useState([]);
+  const [yieldData, setYieldData] = useState<YieldDataItem[]>([]);
   const [selectedYield, setSelectedYield] = useState<YieldItem | null>(null);
   const [leverage, setLeverage] = useState(1);
   const [rbtcAmount, setRbtcAmount] = useState<string>('');
@@ -96,7 +106,7 @@ export default function YieldTrading() {
 
   useEffect(() => {
     if (status === 'success' && apyData) {
-      const formattedYieldData = apyData.apyupdateds.map((item: any) => ({
+      const formattedYieldData = (apyData as ApyData).apyupdateds.map((item) => ({
         name: `APY ${item.id}`,
         apy: parseFloat(item.newAPY)
       }));
@@ -161,10 +171,10 @@ export default function YieldTrading() {
           takeProfitAPY,
           stopLossAPY
         ],
-        value: collateralAmount,
+        value: collateralAmount.toBigInt(),
       });
 
-      if (!result) {
+      if (result === undefined) {
         throw new Error('Transaction failed');
       }
 
@@ -174,7 +184,7 @@ export default function YieldTrading() {
       });
 
       // Wait for transaction confirmation
-      const receipt = await result.wait();
+      const receipt = await (result as TransactionResponse).wait();
 
       toast({
         title: "Trade Successful",
@@ -310,7 +320,7 @@ export default function YieldTrading() {
                       onChange={(e) => setSelectedYield(JSON.parse(e.target.value))}
                     >
                       <option value="">Select an APY</option>
-                      {yieldData.map((yieldItem: YieldItem) => (
+                      {yieldData.map((yieldItem: YieldDataItem) => (
                         <option key={yieldItem.name} value={JSON.stringify(yieldItem)}>
                           {yieldItem.name} - {yieldItem.apy.toFixed(2)}%
                         </option>

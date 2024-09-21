@@ -4,11 +4,30 @@ import Button from "@/components/ui/button";
 import { useAccount, useReadContract, useWriteContract } from "wagmi";
 import { useToast } from "@/components/ui/use-toast";
 import Loader from "@/components/ui/loader";
+import { useQuery } from '@tanstack/react-query';
+import { gql, request } from 'graphql-request';
 
 interface YieldItem {
   name: string;
   apy: number;
 }
+
+const query = gql`{
+  apyupdateds(first: 5) {
+    id
+    newAPY
+    blockNumber
+    blockTimestamp
+  }
+  ownershipTransferreds(first: 5) {
+    id
+    previousOwner
+    newOwner
+    blockNumber
+  }
+}`;
+
+const url = 'https://api.studio.thegraph.com/query/89588/eth-global-singapore/version/latest';
 
 export default function YieldTrading() {
   const [yieldData, setYieldData] = useState([]);
@@ -17,17 +36,20 @@ export default function YieldTrading() {
   const { address } = useAccount();
   const { toast } = useToast();
   const [position, setPosition] = useState<'long' | 'short'>('long');
+  const { data: apyData, status } = useQuery({
+    queryKey: ['apyData'],
+    queryFn: async () => await request(url, query)
+  });
 
   useEffect(() => {
-    // Fetch yield data from API (placeholder, to be replaced with actual API call)
-    const fetchYieldData = async () => {
-      // const response = await fetch('api-endpoint');
-      // const data = await response.json();
-      // setYieldData(data);
-    };
-
-    fetchYieldData();
-  }, []);
+    if (status === 'success' && apyData) {
+      const formattedYieldData = apyData.apyupdateds.map((item: any) => ({
+        name: `APY ${item.id}`,
+        apy: parseFloat(item.newAPY)
+      }));
+      setYieldData(formattedYieldData);
+    }
+  }, [apyData, status]);
 
   const handleTrade = async () => {
     // Implement trading logic here, should interact with the smart contract
@@ -107,12 +129,12 @@ export default function YieldTrading() {
               <div className="bg-gray-700 rounded p-2 flex justify-between items-center">
                 <button className="text-2xl" onClick={() => setLeverage(Math.max(1, leverage - 0.1))}>-</button>
                 <span>{leverage.toFixed(1)}x</span>
-                <button className="text-2xl" onClick={() => setLeverage(Math.min(25, leverage + 0.1))}>+</button>
+                <button className="text-2xl" onClick={() => setLeverage(Math.min(100, leverage + 0.1))}>+</button>
               </div>
               <input
                 type="range"
                 min="1"
-                max="25"
+                max="100"
                 step="0.1"
                 value={leverage}
                 onChange={(e) => setLeverage(Number(e.target.value))}
@@ -140,6 +162,22 @@ export default function YieldTrading() {
             </Button>
           </CardContent>
         </Card>
+      </div>
+      {status === 'pending' && <Loader />}
+      {status === 'error' && <div>Error occurred querying the Subgraph</div>}
+      <div className="mt-4">
+        <label className="block mb-2">Select Yield</label>
+        <select
+          className="w-full bg-gray-700 rounded p-2"
+          onChange={(e) => setSelectedYield(JSON.parse(e.target.value))}
+        >
+          <option value="">Select an APY</option>
+          {yieldData.map((yieldItem: YieldItem) => (
+            <option key={yieldItem.name} value={JSON.stringify(yieldItem)}>
+              {yieldItem.name} - {yieldItem.apy.toFixed(2)}%
+            </option>
+          ))}
+        </select>
       </div>
     </div>
   );

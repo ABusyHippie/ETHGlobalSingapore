@@ -12,7 +12,7 @@ interface YieldItem {
 
 export default function YieldTrading() {
   const [yieldData, setYieldData] = useState([]);
-  const [selectedYield, setSelectedYield] = useState(null);
+  const [selectedYield, setSelectedYield] = useState<YieldItem | null>(null);
   const [leverage, setLeverage] = useState(1);
   const { address } = useAccount();
   const { toast } = useToast();

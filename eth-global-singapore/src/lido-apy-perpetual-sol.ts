@@ -6,7 +6,7 @@ import {
   PositionOpened as PositionOpenedEvent,
   TokenAdded as TokenAddedEvent,
   TokenRemoved as TokenRemovedEvent
-} from "../generated/LidoAPYPerpetual.sol/LidoAPYPerpetual.sol"
+} from "../generated/LidoAPYPerpetual.sol/LidoAPYPerpetual_sol"
 import {
   APYUpdated,
   OwnershipTransferred,

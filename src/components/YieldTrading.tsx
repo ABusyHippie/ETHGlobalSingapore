@@ -37,6 +37,19 @@ const query = gql`{
 
 const url = 'https://api.studio.thegraph.com/query/89588/eth-global-singapore/version/latest';
 
+interface Position {
+  isLong: boolean;
+  size: string;
+  collateral: string;
+  entryAPY: string;
+  leverage: string;
+  liquidationAPY: string;
+  openTime: string;
+  tokenAddress: string;
+  takeProfitAPY: string;
+  stopLossAPY: string;
+}
+
 export default function YieldTrading() {
   const [yieldData, setYieldData] = useState([]);
   const [selectedYield, setSelectedYield] = useState<YieldItem | null>(null);
@@ -64,6 +77,22 @@ export default function YieldTrading() {
     long: ['#134e5e', '#71b280'],
     short: ['#8B0000', '#FF6347'] 
   };
+
+  const [openPosition, setOpenPosition] = useState<Position | null>(null);
+
+  const { data: positionData, refetch: refetchPosition } = useContractRead({
+    address: CONTRACT_ADDRESS,
+    abi: LidoAPYPerpetualABI,
+    functionName: 'getPosition',
+    args: [address, ethers.constants.AddressZero],
+    enabled: !!address,
+  });
+
+  useEffect(() => {
+    if (positionData) {
+      setOpenPosition(positionData as Position);
+    }
+  }, [positionData]);
 
   useEffect(() => {
     if (status === 'success' && apyData) {
@@ -120,7 +149,7 @@ export default function YieldTrading() {
       const takeProfitAPY = ethers.utils.parseUnits((selectedYield.apy * 1.1).toString(), 16);
       const stopLossAPY = ethers.utils.parseUnits((selectedYield.apy * 0.9).toString(), 16);
 
-      const { hash } = await writeContract({
+      const result = await writeContract({
         address: CONTRACT_ADDRESS,
         abi: LidoAPYPerpetualABI,
         functionName: 'openPosition',
@@ -135,24 +164,30 @@ export default function YieldTrading() {
         value: collateralAmount,
       });
 
+      if (!result) {
+        throw new Error('Transaction failed');
+      }
+
       toast({
         title: "Trade Submitted",
-        description: `Transaction hash: ${hash}`,
+        description: `Transaction submitted. Please wait for confirmation.`,
       });
 
       // Wait for transaction confirmation
-      const provider = new ethers.providers.JsonRpcProvider(/* Add your RPC URL here */);
-      await provider.waitForTransaction(hash);
+      const receipt = await result.wait();
 
       toast({
         title: "Trade Successful",
-        description: `You've opened a ${position} position with ${leverage}x leverage`,
+        description: `You've opened a ${position} position with ${leverage}x leverage. Transaction hash: ${receipt.transactionHash}`,
       });
+
+      // Refetch the position data after a successful trade
+      refetchPosition();
     } catch (error) {
       console.error('Error opening position:', error);
       toast({
         title: "Trade Failed",
-        description: "An error occurred while processing your trade",
+        description: error instanceof Error ? error.message : "An error occurred while processing your trade",
         variant: "destructive",
       });
     }
@@ -182,6 +217,9 @@ export default function YieldTrading() {
         title: "Position Closed",
         description: "Your position has been successfully closed",
       });
+
+      // Refetch the position data after closing
+      refetchPosition();
     } catch (error) {
       console.error('Error closing position:', error);
       toast({
@@ -196,6 +234,42 @@ export default function YieldTrading() {
     if (!rbtcAmount || !leverage) return '-';
     const size = parseFloat(rbtcAmount) * leverage;
     return size.toFixed(4);
+  };
+
+  // New component to display open position
+  const OpenPositionCard = () => {
+    if (!openPosition || openPosition.size === '0') return null;
+
+    return (
+      <Card className="bg-gray-800/80 text-white mb-4 backdrop-blur-sm">
+        <CardContent className="p-4 space-y-4">
+          <h3 className="text-lg font-semibold">Open Positions</h3>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <span className="font-medium">Type:</span> {openPosition.isLong ? 'Long' : 'Short'}
+            </div>
+            <div>
+              <span className="font-medium">Size:</span> {ethers.utils.formatEther(openPosition.size)} RBTC
+            </div>
+            <div>
+              <span className="font-medium">Collateral:</span> {ethers.utils.formatEther(openPosition.collateral)} RBTC
+            </div>
+            <div>
+              <span className="font-medium">Leverage:</span> {ethers.utils.formatUnits(openPosition.leverage, 18)}x
+            </div>
+            <div>
+              <span className="font-medium">Entry APY:</span> {ethers.utils.formatUnits(openPosition.entryAPY, 18)}%
+            </div>
+            <div>
+              <span className="font-medium">Liquidation APY:</span> {ethers.utils.formatUnits(openPosition.liquidationAPY, 18)}%
+            </div>
+          </div>
+          <Button onClick={closePosition} className="w-full bg-red-500">
+            Close Position
+          </Button>
+        </CardContent>
+      </Card>
+    );
   };
 
   return (
@@ -214,120 +288,117 @@ export default function YieldTrading() {
         }}
         transition={{ type: 'tween', ease: 'backOut', duration: 0.5 }}
       />
-      <div className="max-w-md mx-auto relative z-10">
+      <div className="max-w-7xl mx-auto relative z-10">
         <header className="flex justify-between items-center mb-6">
           <div className="flex items-center space-x-2">
-            <span className="font-semibold">Yield Trading</span>
-            <button className="bg-gray-700 p-2 rounded-full">
-              {/* Add settings icon if needed*/} 
-            </button>
           </div>
         </header>
 
-        <Card className="bg-gray-800/80 text-white mb-4 backdrop-blur-sm">
-          <CardContent className="p-4 space-y-6">
-            <div>
-              <label className="block mb-2">Select Yield</label>
-              {isLoading ? (
-                <Loader />
-              ) : isError ? (
-                <div>Error loading yield data</div>
-              ) : (
-                <select
-                  className="w-full bg-gray-700 rounded p-2"
-                  onChange={(e) => setSelectedYield(JSON.parse(e.target.value))}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="w-full md:order-1">
+            <Card className="bg-gray-800/80 text-white backdrop-blur-sm h-full">
+              <CardContent className="p-4 space-y-6">
+                <div>
+                  <label className="block mb-2">Select Yield</label>
+                  {isLoading ? (
+                    <Loader />
+                  ) : isError ? (
+                    <div>Error loading yield data</div>
+                  ) : (
+                    <select
+                      className="w-full bg-gray-700 rounded p-2"
+                      onChange={(e) => setSelectedYield(JSON.parse(e.target.value))}
+                    >
+                      <option value="">Select an APY</option>
+                      {yieldData.map((yieldItem: YieldItem) => (
+                        <option key={yieldItem.name} value={JSON.stringify(yieldItem)}>
+                          {yieldItem.name} - {yieldItem.apy.toFixed(2)}%
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div className="flex space-x-2 mb-4">
+                  <Button 
+                    variant={position === 'long' ? "default" : "outline"} 
+                    className={`flex-1 ${position === 'long' ? 'bg-green-500' : ''}`}
+                    onClick={() => setPosition('long')}
+                  >
+                    Long
+                  </Button>
+                  <Button 
+                    variant={position === 'short' ? "default" : "outline"} 
+                    className={`flex-1 ${position === 'short' ? 'bg-red-500' : ''}`}
+                    onClick={() => setPosition('short')}
+                  >
+                    Short
+                  </Button>
+                </div>
+
+                <div>
+                  <label className="block mb-2">You're Paying (RBTC)</label>
+                  <input
+                    type="number"
+                    value={rbtcAmount}
+                    onChange={(e) => setRbtcAmount(e.target.value)}
+                    className="w-full bg-gray-700 rounded p-2"
+                    placeholder="Enter RBTC amount"
+                  />
+                </div>
+
+                <div>
+                  <label className="block mb-2">Size of {position === 'long' ? 'Long' : 'Short'}</label>
+                  <div className="flex items-center bg-gray-700 rounded p-2">
+                    <span className="flex-1">RBTC</span>
+                    <span className="text-right w-1/2">{calculateSize()}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block mb-2">Leverage</label>
+                  <div className="bg-gray-700 rounded p-2 flex justify-between items-center">
+                    <button className="text-2xl" onClick={() => setLeverage(Math.max(1, leverage - 0.1))}>-</button>
+                    <span>{leverage.toFixed(1)}x</span>
+                    <button className="text-2xl" onClick={() => setLeverage(Math.min(100, leverage + 0.1))}>+</button>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="100"
+                    step="0.1"
+                    value={leverage}
+                    onChange={(e) => setLeverage(Number(e.target.value))}
+                    className="w-full mt-2"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span>Collateral</span>
+                    <span>{rbtcAmount ? `${rbtcAmount} RBTC` : '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Size in RBTC</span>
+                    <span>{calculateSize()}</span>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleTrade}
+                  disabled={!selectedYield || !address || !rbtcAmount}
+                  className={`w-full ${position === 'long' ? 'bg-green-500' : 'bg-red-500'}`}
                 >
-                  <option value="">Select an APY</option>
-                  {yieldData.map((yieldItem: YieldItem) => (
-                    <option key={yieldItem.name} value={JSON.stringify(yieldItem)}>
-                      {yieldItem.name} - {yieldItem.apy.toFixed(2)}%
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
+                  {position === 'long' ? 'Long' : 'Short'}
+                </Button>
 
-            <div className="flex space-x-2 mb-4">
-              <Button 
-                variant={position === 'long' ? "default" : "outline"} 
-                className={`flex-1 ${position === 'long' ? 'bg-green-500' : ''}`}
-                onClick={() => setPosition('long')}
-              >
-                Long
-              </Button>
-              <Button 
-                variant={position === 'short' ? "default" : "outline"} 
-                className={`flex-1 ${position === 'short' ? 'bg-red-500' : ''}`}
-                onClick={() => setPosition('short')}
-              >
-                Short
-              </Button>
-            </div>
-
-            <div>
-              <label className="block mb-2">You're Paying (RBTC)</label>
-              <input
-                type="number"
-                value={rbtcAmount}
-                onChange={(e) => setRbtcAmount(e.target.value)}
-                className="w-full bg-gray-700 rounded p-2"
-                placeholder="Enter RBTC amount"
-              />
-            </div>
-
-            <div>
-              <label className="block mb-2">Size of {position === 'long' ? 'Long' : 'Short'}</label>
-              <div className="flex items-center bg-gray-700 rounded p-2">
-                <span className="flex-1">RBTC</span>
-                <span className="text-right w-1/2">{calculateSize()}</span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block mb-2">Leverage</label>
-              <div className="bg-gray-700 rounded p-2 flex justify-between items-center">
-                <button className="text-2xl" onClick={() => setLeverage(Math.max(1, leverage - 0.1))}>-</button>
-                <span>{leverage.toFixed(1)}x</span>
-                <button className="text-2xl" onClick={() => setLeverage(Math.min(100, leverage + 0.1))}>+</button>
-              </div>
-              <input
-                type="range"
-                min="1"
-                max="100"
-                step="0.1"
-                value={leverage}
-                onChange={(e) => setLeverage(Number(e.target.value))}
-                className="w-full mt-2"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span>Collateral</span>
-                <span>{rbtcAmount ? `${rbtcAmount} RBTC` : '-'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Size in RBTC</span>
-                <span>{calculateSize()}</span>
-              </div>
-            </div>
-
-            <Button
-              onClick={handleTrade}
-              disabled={!selectedYield || !address || !rbtcAmount}
-              className={`w-full ${position === 'long' ? 'bg-green-500' : 'bg-red-500'}`}
-            >
-              {position === 'long' ? 'Long' : 'Short'}
-            </Button>
-
-            <Button
-              onClick={closePosition}
-              className="w-full mt-2 bg-gray-500"
-            >
-              Close Position
-            </Button>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="w-full md:order-2">
+            <OpenPositionCard />
+          </div>
+        </div>
       </div>
       {status === 'pending' && <Loader />}
       {status === 'error' && <div>Error occurred querying the Subgraph</div>}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import Button from "@/components/ui/button";
 import { useAccount, useReadContract, useWriteContract } from "wagmi";
 import { useToast } from "@/components/ui/use-toast";
@@ -16,6 +16,7 @@ export default function YieldTrading() {
   const [leverage, setLeverage] = useState(1);
   const { address } = useAccount();
   const { toast } = useToast();
+  const [position, setPosition] = useState<'long' | 'short'>('long');
 
   useEffect(() => {
     // Fetch yield data from API (placeholder, to be replaced with actual API call)
@@ -47,40 +48,99 @@ export default function YieldTrading() {
   };
 
   return (
-    <Card className="mt-10 max-w-[600px] mx-auto">
-      <CardHeader>
-        <CardTitle>Yield Trading Platform</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <h3 className="text-lg font-semibold">Available Yields</h3>
-          {yieldData.length === 0 ? (
-            <Loader />
-          ) : (
-            <ul>
-              {yieldData.map((yieldItem: YieldItem, index) => (
-                <li key={index} onClick={() => setSelectedYield(yieldItem)}>
-                  {yieldItem.name} - {yieldItem.apy}%
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <div>
-          <h3 className="text-lg font-semibold">Leverage</h3>
-          <input
-            type="range"
-            min="1"
-            max="10"
-            value={leverage}
-            onChange={(e) => setLeverage(Number(e.target.value))}
-          />
-          <span>{leverage}x</span>
-        </div>
-        <Button onClick={handleTrade} disabled={!selectedYield || !address}>
-          Trade
-        </Button>
-      </CardContent>
-    </Card>
+    <div className="min-h-screen bg-gray-900 text-white p-4">
+      <div className="max-w-md mx-auto">
+        <header className="flex justify-between items-center mb-6">
+          <div className="flex items-center space-x-2">
+            <span className="font-semibold">Yield Trading</span>
+            <button className="bg-gray-700 p-2 rounded-full">
+              {/* Add settings icon */}
+            </button>
+          </div>
+        </header>
+
+        <Card className="bg-gray-800 text-white">
+          <CardContent className="p-4 space-y-6">
+            <div className="flex space-x-2 mb-4">
+              <Button 
+                variant={position === 'long' ? "default" : "outline"} 
+                className={`flex-1 ${position === 'long' ? 'bg-green-500' : ''}`}
+                onClick={() => setPosition('long')}
+              >
+                Long
+              </Button>
+              <Button 
+                variant={position === 'short' ? "default" : "outline"} 
+                className={`flex-1 ${position === 'short' ? 'bg-red-500' : ''}`}
+                onClick={() => setPosition('short')}
+              >
+                Short
+              </Button>
+            </div>
+
+            <div>
+              <label className="block mb-2">You're Paying</label>
+              <div className="flex items-center bg-gray-700 rounded p-2">
+                <span className="flex-1">Selected Yield</span>
+                <input
+                  type="number"
+                  className="bg-transparent text-right w-1/2"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block mb-2">Size of {position === 'long' ? 'Long' : 'Short'}</label>
+              <div className="flex items-center bg-gray-700 rounded p-2">
+                <span className="flex-1">Selected Yield</span>
+                <input
+                  type="number"
+                  className="bg-transparent text-right w-1/2"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block mb-2">Leverage</label>
+              <div className="bg-gray-700 rounded p-2 flex justify-between items-center">
+                <button className="text-2xl" onClick={() => setLeverage(Math.max(1, leverage - 0.1))}>-</button>
+                <span>{leverage.toFixed(1)}x</span>
+                <button className="text-2xl" onClick={() => setLeverage(Math.min(25, leverage + 0.1))}>+</button>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="25"
+                step="0.1"
+                value={leverage}
+                onChange={(e) => setLeverage(Number(e.target.value))}
+                className="w-full mt-2"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span>Collateral</span>
+                <span>-</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Size in USD</span>
+                <span>-</span>
+              </div>
+            </div>
+
+            <Button
+              onClick={handleTrade}
+              disabled={!selectedYield || !address}
+              className={`w-full ${position === 'long' ? 'bg-green-500' : 'bg-red-500'}`}
+            >
+              {position === 'long' ? 'Long' : 'Short'}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import Button from "@/components/ui/button";
-import { useAccount, useReadContract, useWriteContract } from "wagmi";
+import { useAccount, useReadContract, useWriteContract, useContractRead } from "wagmi";
 import { useToast } from "@/components/ui/use-toast";
 import Loader from "@/components/ui/loader";
 import { useQuery } from '@tanstack/react-query';
@@ -52,6 +52,12 @@ export default function YieldTrading() {
     queryFn: async () => await request(url, query)
   });
 
+  const { data: contractYieldData, isLoading, isError } = useContractRead({
+    address: CONTRACT_ADDRESS,
+    abi: LidoAPYPerpetualABI,
+    functionName: 'getAPY',
+  });
+
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -69,6 +75,16 @@ export default function YieldTrading() {
       setYieldData(formattedYieldData);
     }
   }, [apyData, status]);
+
+  useEffect(() => {
+    if (contractYieldData) {
+      const formattedYieldData = [{
+        name: 'Current APY',
+        apy: parseFloat(ethers.utils.formatUnits(contractYieldData, 16))
+      }];
+      setYieldData(formattedYieldData);
+    }
+  }, [contractYieldData]);
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -203,17 +219,23 @@ export default function YieldTrading() {
           <CardContent className="p-4 space-y-6">
             <div>
               <label className="block mb-2">Select Yield</label>
-              <select
-                className="w-full bg-gray-700 rounded p-2"
-                onChange={(e) => setSelectedYield(JSON.parse(e.target.value))}
-              >
-                <option value="">Select an APY</option>
-                {yieldData.map((yieldItem: YieldItem) => (
-                  <option key={yieldItem.name} value={JSON.stringify(yieldItem)}>
-                    {yieldItem.name} - {yieldItem.apy.toFixed(2)}%
-                  </option>
-                ))}
-              </select>
+              {isLoading ? (
+                <Loader />
+              ) : isError ? (
+                <div>Error loading yield data</div>
+              ) : (
+                <select
+                  className="w-full bg-gray-700 rounded p-2"
+                  onChange={(e) => setSelectedYield(JSON.parse(e.target.value))}
+                >
+                  <option value="">Select an APY</option>
+                  {yieldData.map((yieldItem: YieldItem) => (
+                    <option key={yieldItem.name} value={JSON.stringify(yieldItem)}>
+                      {yieldItem.name} - {yieldItem.apy.toFixed(2)}%
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div className="flex space-x-2 mb-4">

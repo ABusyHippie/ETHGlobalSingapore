@@ -54,7 +54,7 @@ export default function YieldTrading() {
           <div className="flex items-center space-x-2">
             <span className="font-semibold">Yield Trading</span>
             <button className="bg-gray-700 p-2 rounded-full">
-              {/* Add settings icon */}
+              {/* Add settings icon if needed*/} 
             </button>
           </div>
         </header>

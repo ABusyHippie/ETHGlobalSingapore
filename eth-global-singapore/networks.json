@@ -1,0 +1,8 @@
+{
+  "rootstock": {
+    "LidoAPYPerpetual.sol": {
+      "address": "0x5c617A8F9bd9620604c5bFb30e5C7812F37BAe73",
+      "startBlock": 5565812
+    }
+  }
+}

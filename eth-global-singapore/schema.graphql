@@ -1,0 +1,68 @@
+type APYUpdated @entity(immutable: true) {
+  id: Bytes!
+  newAPY: BigInt! # uint256
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type OwnershipTransferred @entity(immutable: true) {
+  id: Bytes!
+  previousOwner: Bytes! # address
+  newOwner: Bytes! # address
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type PositionClosed @entity(immutable: true) {
+  id: Bytes!
+  trader: Bytes! # address
+  token: Bytes! # address
+  isLong: Boolean! # bool
+  profit: BigInt! # uint256
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type PositionLiquidated @entity(immutable: true) {
+  id: Bytes!
+  trader: Bytes! # address
+  token: Bytes! # address
+  isLong: Boolean! # bool
+  collateral: BigInt! # uint256
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type PositionOpened @entity(immutable: true) {
+  id: Bytes!
+  trader: Bytes! # address
+  token: Bytes! # address
+  isLong: Boolean! # bool
+  size: BigInt! # uint256
+  collateral: BigInt! # uint256
+  leverage: BigInt! # uint256
+  entryAPY: BigInt! # uint256
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type TokenAdded @entity(immutable: true) {
+  id: Bytes!
+  token: Bytes! # address
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type TokenRemoved @entity(immutable: true) {
+  id: Bytes!
+  token: Bytes! # address
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}

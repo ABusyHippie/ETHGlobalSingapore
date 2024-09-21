@@ -52,10 +52,10 @@ export default function YieldTrading() {
     queryFn: async () => await request(url, query)
   });
 
-  const { data: contractYieldData, isLoading, isError } = useContractRead({
+  const { data: contractAPY, isLoading, isError } = useContractRead({
     address: CONTRACT_ADDRESS,
     abi: LidoAPYPerpetualABI,
-    functionName: 'getAPY',
+    functionName: 'currentAPY',
   });
 
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
@@ -77,14 +77,14 @@ export default function YieldTrading() {
   }, [apyData, status]);
 
   useEffect(() => {
-    if (contractYieldData) {
+    if (contractAPY) {
       const formattedYieldData = [{
         name: 'Current APY',
-        apy: parseFloat(ethers.utils.formatUnits(contractYieldData, 16))
+        apy: parseFloat(ethers.utils.formatUnits(contractAPY, 18))
       }];
       setYieldData(formattedYieldData);
     }
-  }, [contractYieldData]);
+  }, [contractAPY]);
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {

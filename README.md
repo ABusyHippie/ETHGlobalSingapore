@@ -36,6 +36,13 @@ We built a new leveraged DeFi trading derivative with Rootstock where you can be
   - Public speaking
   - Software and hardware development
   - Construction
+  - 
+### Arvin Bhangu
+- Developer
+- Fundraiser
+- founder
+- Networker
+- Lovable goof
 
 ## Setup and Usage
 

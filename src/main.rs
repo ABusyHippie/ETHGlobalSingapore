@@ -199,7 +199,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let provider = Provider::<Http>::try_from(rpc_url)?;
 
-    let private_key = env::var("PRIVATE_KEY")
+    let private_key = env::var("ROOTSTOCK_TESTNET_PRIVATE_KEY")
         .map_err(|_| "PRIVATE_KEY not set in .env file")?;
     println!("Private key loaded");
 
